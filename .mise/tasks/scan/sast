@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#MISE description="SAST: static analysis — deno lint with security + complexity rules"
+set -euo pipefail
+
+ENTRY="$(jq -r '.main // "src/mod.ts"' deno.json 2>/dev/null || echo 'src/mod.ts')"
+SRC_DIR="$(dirname "${ENTRY}")"
+
+echo "=== SAST Scan ==="
+echo "→ deno lint (recommended + ban-untagged-todo)"
+deno lint --rules-tags=recommended "${SRC_DIR}"
+
+echo "→ no-eval pattern scan"
+if grep -rn --include="*.ts" 'eval(' "${SRC_DIR}" 2>/dev/null | grep -v "//.*eval\|test\|spec"; then
+  echo "⚠ eval() detected — review for injection risk"
+fi
+
+echo "→ no-hardcoded-secret heuristic"
+if grep -rn --include="*.ts" -E '(password|secret|api_key|token)\s*=\s*"[^"]' "${SRC_DIR}" 2>/dev/null; then
+  echo "⚠ Potential hardcoded secret detected"
+fi
+
+echo ""
+echo "✓ SAST scan complete"

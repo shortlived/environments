@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Run the test suite (deno test -A)"
+set -euo pipefail
+
+FILTER="${1:-}"
+
+if [ -n "${FILTER}" ]; then
+  echo "Running tests matching: ${FILTER}"
+  exec deno test -A --reporter=pretty --filter "${FILTER}"
+else
+  exec deno test -A --reporter=pretty
+fi

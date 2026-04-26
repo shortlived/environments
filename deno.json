@@ -1,0 +1,92 @@
+{
+  "version": "v0.1.4",
+  "name": "@softdist/orchestras",
+  "license": "MIT",
+  "main": "src/mod.ts",
+  "exports": "./src/mod.ts",
+  "test": {
+    "include": [
+      "src/tests/"
+    ]
+  },
+  "nodeModulesDir": "auto",
+  "compilerOptions": {
+    "types": []
+  },
+  "publish": {
+    "include": [
+      "./src/mod.ts",
+      "./src/version.ts",
+      "./src/make_version.ts"
+    ]
+  },
+  "lint": {
+    "include": [
+      "src/*.ts"
+    ],
+    "exclude": [
+      "src/tests/*.ts",
+      "src/fixtures/**/*.ts"
+    ],
+    "rules": {
+      "tags": [
+        "recommended"
+      ],
+      "include": [
+        "ban-untagged-todo"
+      ],
+      "exclude": [
+        "no-explicit-any",
+        "no-unused-vars",
+        "require-await"
+      ]
+    }
+  },
+  "fmt": {
+    "include": [
+      "src/**/*.ts"
+    ],
+    "exclude": [
+      "src/tests/*.ts"
+    ],
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "singleQuote": false,
+    "proseWrap": "preserve"
+  },
+  "tasks": {
+    "execute":         "deno run --allow-all src/mod.ts",
+    "run":             "deno run --allow-all src/mod.ts",
+    "check":           "deno check src/mod.ts",
+    "lint":            "deno lint",
+    "lint:fix":        "deno lint --fix",
+    "fmt":             "deno fmt",
+    "fmt:check":       "deno fmt --check",
+    "test":            "deno test -A --reporter=pretty",
+    "build":           "deno run --allow-read --allow-write src/make_version.ts",
+    "upgrade":         "deno outdated --update --latest",
+    "pre-commit":      "deno run -A npm:lefthook run pre-commit",
+    "pre-push":        "deno run -A npm:lefthook run pre-push",
+    "validate-hooks":  "deno run -A npm:lefthook validate"
+  },
+  "imports": {
+    "@deno/dnt": "jsr:@deno/dnt@^0.41.2",
+    "@std/assert": "jsr:@std/assert@1.0.13",
+    "@std/encoding": "jsr:@std/encoding@^1.0.10",
+    "@std/fmt": "jsr:@std/fmt@^1.0.7",
+    "@std/fs": "jsr:@std/fs@^1.0.17",
+    "@std/path": "jsr:@std/path@^1.0.9",
+    "@std/semver": "jsr:@std/semver@^1.0.5",
+    "@std/testing": "jsr:@std/testing@^1.0.11",
+    "@cliffy/command": "jsr:@cliffy/command@^1.0.0-rc.7",
+    "@cliffy/prompt": "jsr:@cliffy/prompt@^1.0.0-rc.7",
+    "@olli/async-lock": "jsr:@olli/async-lock@^1.0.1",
+    "@std/async": "jsr:@std/async@^1.0.12",
+    "@std/collections": "jsr:@std/collections@^1.0.11",
+    "@stdlib/string-replace": "npm:@stdlib/string-replace@^0.2.2",
+    "fs": "npm:fs@^0.0.1-security",
+    "lefthook": "npm:lefthook@^1.11.12",
+    "node-emoji": "npm:node-emoji@^2.2.0",
+    "testcontainers": "npm:testcontainers@^10.24.2"
+  }
+}

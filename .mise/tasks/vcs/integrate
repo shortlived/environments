@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#MISE description="Integrate feature branch into develop via rebase (no merge commits)"
+# Usage: mise run vcs:integrate feat/my-feature
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/colors.sh" 2>/dev/null || true
+original=$(git branch --show-current)
+feature="${1:-${original}}"
+if [ -z "$feature" ] || [ "$feature" = "develop" ] || [ "$feature" = "main" ]; then
+  echo "ERROR: pass a feature branch name, e.g.: mise run vcs:integrate feat/my-feature"
+  exit 1
+fi
+echo "=== Integrating '${feature}' into develop ==="
+echo "1/4 Rebasing feature onto origin/develop..."
+git checkout "${feature}"
+git fetch origin develop
+git pull --rebase origin develop
+echo "2/4 Updating develop..."
+git checkout develop
+git pull origin develop
+echo "3/4 Rebasing develop onto '${feature}'..."
+git rebase "${feature}"
+echo "4/4 Pushing develop..."
+git push --force-with-lease origin develop
+echo "✓ '${feature}' integrated into develop"
+echo "  Next: mise run vcs:release"
+if [ "${original}" != "develop" ] && git show-ref --quiet "refs/heads/${original}" 2>/dev/null; then
+  git checkout "${original}" 2>/dev/null || true
+fi

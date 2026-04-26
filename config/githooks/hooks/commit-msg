@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# commit-msg — validates commit message format (Conventional Commits)
+# https://www.conventionalcommits.org/
+set -euo pipefail
+
+source "$(git rev-parse --show-toplevel)/scripts/colors.sh" 2>/dev/null || true
+
+MSG_FILE="$1"
+MSG=$(cat "$MSG_FILE")
+
+# Skip merge commits, revert commits, and [skip ci] auto-commits
+if echo "$MSG" | grep -qE '^(Merge|Revert|chore: sync version)'; then
+  exit 0
+fi
+
+# Conventional commit pattern
+CC_PATTERN='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?(!)?: .{1,100}$'
+
+FIRST_LINE=$(echo "$MSG" | head -n 1)
+
+if ! echo "$FIRST_LINE" | grep -qE "$CC_PATTERN"; then
+  echo -e "${RED:-}✗ Commit message does not follow Conventional Commits format.${ENDCOLOR:-}"
+  echo ""
+  echo "  Expected: <type>(<scope>): <description>"
+  echo "  Types: feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert"
+  echo ""
+  echo "  Examples:"
+  echo "    feat: add new API endpoint"
+  echo "    fix(router): handle empty path"
+  echo "    chore: bump version 0.1.0 → 0.2.0"
+  echo ""
+  echo "  Your message:"
+  echo "    ${FIRST_LINE}"
+  exit 1
+fi
+
+echo -e "${GREEN:-}✓ Commit message format valid${ENDCOLOR:-}"

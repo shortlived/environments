@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Execute the application entry point"
+set -euo pipefail
+
+ENTRY="$(jq -r '.main // "src/mod.ts"' deno.json 2>/dev/null || echo 'src/mod.ts')"
+exec deno run --allow-all "${ENTRY}" "$@"

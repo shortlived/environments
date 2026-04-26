@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#MISE description="Trigger GitHub Advanced Security (CodeQL) analysis scan via workflow dispatch"
+set -euo pipefail
+
+if ! gh auth status &>/dev/null; then
+  echo "ERROR: gh CLI not authenticated — run: gh auth login"
+  exit 1
+fi
+
+REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
+echo "Triggering GHAS scan for ${REPO}..."
+
+gh workflow run ghas-scan.yml -R "${REPO}" 2>/dev/null || {
+  echo "Workflow 'ghas-scan.yml' not found or dispatch failed."
+  echo "Verify: gh workflow list -R '${REPO}'"
+  exit 1
+}
+
+echo "✓ GHAS scan dispatched"
+echo "  Monitor: gh run list --workflow=ghas-scan.yml"

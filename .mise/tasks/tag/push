@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Push all local tags to origin"
+set -euo pipefail
+git push origin --tags
+echo "✓ Tags pushed"

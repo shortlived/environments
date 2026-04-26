@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1
+FROM --platform=$BUILDPLATFORM michaelr0/volta-docker:alpine AS volta
+FROM --platform=$BUILDPLATFORM docker:28.0.4-dind-alpine3.21 AS dind
+
+COPY trusted_certs.pem /usr/local/share/ca-certificates/trusted_certs.crt
+COPY --from=volta /opt/volta /opt/volta
+LABEL devcontainer-feature-set="none"
+
+ENV PATH=$PATH:/opt/volta/bin
+ENV VOLTA_HOME=/opt/volta
+ENV VOLTA_BIN_PATH=/opt/volta/bin
+
+WORKDIR /home/expert/workspace
+
+USER root
+
+RUN apk add --no-cache --no-check-certificate ca-certificates python3 pipx py3-pip py3-virtualenv uv fish bash xclip xsel deno ruby go direnv typescript && \
+    update-ca-certificates && \
+    python3 -m venv ./ && \
+    . ./bin/activate && \
+    pip install --upgrade pip && \
+    pip install pipenv && \
+    volta -v && \
+    volta setup && \
+    volta install node@20 && \
+    volta install typescript && \
+    volta install npm && \
+    volta install npx && \
+    volta install yarn && \
+    volta install pnpm
+    
+RUN rm /usr/local/share/ca-certificates/trusted_certs.crt
+ENTRYPOINT ["fish", "-i"]

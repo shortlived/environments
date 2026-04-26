@@ -1,0 +1,30 @@
+# mise.toml — tool versions, env, and task discovery
+# All tasks live in .mise/tasks/ as executable scripts.
+# Run `mise tasks` for a full list with descriptions.
+# Run `mise run <task>` to execute a task.
+# Docs: https://mise.jdx.dev/
+
+[tools]
+deno  = "2.0.2"
+node  = "22"
+delta = "latest"
+
+[settings]
+task_output = "prefix"
+experimental = true
+
+[env]
+# Deno cache location
+DENO_DIR = "{{config_root}}/.deno-cache"
+
+# Deno native TLS for corporate proxy / Zscaler cert injection
+DENO_TLS_CA_STORE = "system,mozilla"
+
+# Patterns subscription tracking
+PATTERNS_CHANNEL = "deno1a"
+PATTERNS_REPO    = "orchestras/dev-patterns"
+
+# Git hooks integration
+GITHOOKS_VERSION = "main"
+GITHOOKS_REPO    = "orchestras/dev-patterns"
+GITHOOKS_PROFILE = "deno1a"

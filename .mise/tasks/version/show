@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Show current version from deno.json"
+set -euo pipefail
+version=$(jq -r '.version' deno.json)
+echo "${version}"

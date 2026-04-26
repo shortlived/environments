@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Lint TypeScript sources (deno lint)"
+set -euo pipefail
+echo "Running deno lint..."
+deno lint
+echo "✓ Lint passed"

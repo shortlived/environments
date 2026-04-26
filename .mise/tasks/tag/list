@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="List local version tags"
+set -euo pipefail
+git tag -l 'v*' --sort=-v:refname

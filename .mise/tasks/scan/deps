@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#MISE description="Audit Deno dependencies for known vulnerabilities (deno audit)"
+set -euo pipefail
+
+echo "=== Dependency Audit ==="
+echo "→ checking for vulnerabilities in deno.lock..."
+
+if deno audit 2>/dev/null; then
+  echo "✓ No known vulnerabilities found"
+elif [ -f "deno.lock" ]; then
+  echo "⚠ deno audit not available in this Deno version — falling back to outdated check"
+  deno outdated 2>/dev/null || true
+  echo "  Upgrade Deno to 2.x for full audit support: mise run deno:upgrade"
+else
+  echo "⚠ No deno.lock found — run 'mise run install' first"
+fi
+
+echo ""
+echo "✓ Dependency scan complete"

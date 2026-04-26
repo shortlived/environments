@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#MISE description="Bump patch version from latest remote tag (e.g. v0.1.5 → v0.1.6)"
+# Updates deno.json, regenerates version.ts, commits, and creates local tag.
+# Run `mise run tag:push` to push the tag and trigger the release pipeline.
+set -euo pipefail
+
+git fetch --tags origin
+latest=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v '+' | grep -v -- '-' | head -n 1)
+[ -z "$latest" ] && latest="v0.0.0"
+
+ver="${latest#v}"
+IFS='.' read -r major minor patch <<< "$ver"
+new="v${major}.${minor}.$((patch + 1))"
+
+tmp=$(mktemp)
+jq --arg v "${new}" '.version = $v' deno.json > "${tmp}" && mv "${tmp}" deno.json
+deno run --allow-read --allow-write src/make_version.ts
+
+git add deno.json src/version.ts
+git commit -m "chore: bump version ${latest} → ${new}"
+git tag -l | grep -qx "${new}" || git tag -a "${new}" -m "${new}"
+
+echo "✓ Bumped ${latest} → ${new}"
+echo "  Push with: mise run tag:push"

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#MISE description="Dispatch: trigger autoconfigure-rulesets workflow to apply repo settings"
+# Usage: mise run dispatch:configure [--dry-run]
+set -euo pipefail
+
+DRY_RUN="${1:-false}"
+[ "$DRY_RUN" = "--dry-run" ] && DRY_RUN="true"
+
+if ! gh auth status &>/dev/null; then
+  echo "ERROR: gh CLI not authenticated — run: gh auth login"
+  exit 1
+fi
+
+REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
+echo "Triggering dispatch-autoconfigure-rulesets on ${REPO}..."
+
+gh workflow run dispatch-autoconfigure-rulesets.yml \
+  -R "${REPO}" \
+  -f "dry_run=${DRY_RUN}"
+
+echo "✓ Dispatch sent (dry_run=${DRY_RUN})"
+echo "  Monitor: gh run list --workflow=dispatch-autoconfigure-rulesets.yml"

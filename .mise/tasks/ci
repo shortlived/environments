@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#MISE description="Full CI pipeline: lint → fmt:check → typecheck → test → build → execute"
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+cd "${ROOT}"
+
+PASS=0
+FAIL=0
+
+run_step() {
+  local name="$1"; shift
+  echo "─── ${name} ─────────────────────────────────────"
+  if "$@"; then
+    echo "  ✓ ${name}"
+    PASS=$((PASS + 1))
+  else
+    echo "  ✗ ${name} FAILED"
+    FAIL=$((FAIL + 1))
+    return 1
+  fi
+}
+
+echo "=== CI Pipeline ==="
+echo ""
+run_step "lint:check"  mise run lint:check
+run_step "fmt:check"   mise run fmt:check
+run_step "typecheck"   mise run typecheck
+run_step "test"        mise run test
+run_step "build"       mise run build
+run_step "execute"     mise run execute
+
+echo ""
+echo "────────────────────────────────────────────────"
+echo "Passed: ${PASS}  Failed: ${FAIL}"
+
+if [ "${FAIL}" -gt 0 ]; then
+  echo "✗ CI pipeline failed"
+  exit 1
+fi
+echo "✓ All CI checks passed"

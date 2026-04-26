@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#MISE description="Display current gh CLI auth status and token scope"
+set -euo pipefail
+if ! gh auth status 2>&1; then
+  echo ""
+  echo "Not authenticated. Run: gh auth login"
+  exit 1
+fi
+echo ""
+echo "Token is managed by gh CLI and stays in memory."
+echo "Use 'gh api ...' for API calls — no local token storage needed."

@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# pre-push — runs on `git push`
+# Checks: full test suite, block direct pushes to main bypassing develop
+set -euo pipefail
+
+source "$(git rev-parse --show-toplevel)/scripts/colors.sh" 2>/dev/null || true
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+remote="$1"
+url="$2"
+
+echo -e "${CYAN:-}[pre-push]${ENDCOLOR:-} Running pre-push checks..."
+
+# Read the refs being pushed
+while read -r local_ref local_sha remote_ref _remote_sha; do
+  # Block direct pushes to main (must go through develop → vcs:release)
+  if echo "$remote_ref" | grep -qE '^refs/heads/main$'; then
+    branch=$(git branch --show-current)
+    if [ "$branch" != "develop" ] && [ "$branch" != "main" ]; then
+      echo -e "${RED:-}✗ Direct push to main is blocked.${ENDCOLOR:-}"
+      echo "  Use: mise run vcs:release (from develop branch)"
+      exit 1
+    fi
+  fi
+done
+
+# Run full test suite before any push
+echo -e "  ${BLUE:-}→ deno test${ENDCOLOR:-}"
+deno test -A --reporter=pretty || {
+  echo -e "${RED:-}✗ Tests failed. Fix before pushing.${ENDCOLOR:-}"
+  exit 1
+}
+
+# Type check
+echo -e "  ${BLUE:-}→ deno check${ENDCOLOR:-}"
+ENTRY="$(jq -r '.main // "src/mod.ts"' deno.json 2>/dev/null || echo 'src/mod.ts')"
+deno check "${ENTRY}" || {
+  echo -e "${RED:-}✗ Type check failed. Fix before pushing.${ENDCOLOR:-}"
+  exit 1
+}
+
+echo -e "${GREEN:-}✓ pre-push checks passed${ENDCOLOR:-}"

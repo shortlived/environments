@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#MISE description="Install mise shell completions (detects bash/zsh/fish)"
+set -euo pipefail
+CURRENT_SHELL=$(basename "${SHELL:-/bin/bash}")
+echo "Detected shell: $CURRENT_SHELL"
+install_bash() {
+  local default="$HOME/.local/share/bash-completion/completions/mise"
+  read -rp "Bash completion path [$default]: " dest
+  dest="${dest:-$default}"
+  mkdir -p "$(dirname "$dest")"
+  mise completion bash > "$dest"
+  echo "  ✓ Bash completions → $dest"
+}
+install_zsh() {
+  local default="$HOME/.zsh/completions/_mise"
+  read -rp "Zsh completion path [$default]: " dest
+  dest="${dest:-$default}"
+  mkdir -p "$(dirname "$dest")"
+  mise completion zsh > "$dest"
+  echo "  ✓ Zsh completions → $dest"
+}
+install_fish() {
+  local default="${XDG_CONFIG_HOME:-$HOME/.config}/fish/completions/mise.fish"
+  read -rp "Fish completion path [$default]: " dest
+  dest="${dest:-$default}"
+  mkdir -p "$(dirname "$dest")"
+  mise completion fish > "$dest"
+  echo "  ✓ Fish completions → $dest"
+}
+case "$CURRENT_SHELL" in
+  fish) install_fish ;;
+  zsh)  install_zsh ;;
+  *)    install_bash ;;
+esac
+echo "✓ Done. Restart your shell to activate completions."

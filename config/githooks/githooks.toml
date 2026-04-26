@@ -1,0 +1,34 @@
+# githooks.toml — Declarative git hook manifest for the deno1a channel
+#
+# Sourced from orchestras/dev-patterns lib/deno1a/hooks/githooks.toml
+# Updated by: mise run hooks:sync
+
+[channel]
+name = "deno1a"
+version = "0.1.0"
+description = "Git hooks and mise tasks for Deno projects using Deno and Mise"
+author = "orchestras"
+repo = "orchestras/dev-patterns"
+
+# ─── Hook declarations ────────────────────────────────────────────────────────
+
+[[hooks]]
+name = "pre-commit"
+script = "pre-commit"
+description = "Format-check (deno fmt), lint (deno lint), debug-statement guard, 5MB file cap"
+enabled = true
+fail_fast = true
+
+[[hooks]]
+name = "commit-msg"
+script = "commit-msg"
+description = "Enforce Conventional Commits format on the first line of every commit message"
+enabled = true
+fail_fast = true
+
+[[hooks]]
+name = "pre-push"
+script = "pre-push"
+description = "Run full test suite and block direct pushes to main"
+enabled = true
+fail_fast = true

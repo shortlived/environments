@@ -1,0 +1,27 @@
+FROM denoland/deno:2.0.0 AS builder-run
+RUN mkdir -p /app /tar
+# Copy the necessary files into the container
+WORKDIR /bin
+WORKDIR /bin/aarch64-apple-darwin
+WORKDIR /bin/x86_64-apple-darwin
+WORKDIR /bin/aarch64-unknown-linux-gnu
+WORKDIR /bin/x86_64-unknown-linux-gnu
+WORKDIR /bin/x86_64-pc-windows-msvc
+
+WORKDIR /app
+
+#COPY trusted_certs.pem .
+#ENV DENO_CERT=/app/trusted_certs.pem
+
+COPY src ./src
+COPY scripts ./scripts
+COPY Makefile .
+COPY .envrc .
+COPY release-notes.md .
+COPY deno.json .
+COPY deno.lock .
+
+RUN deno install && mkdir bin
+RUN deno compile --allow-all --target aarch64-apple-darwin --no-check --output ./bin/package-aarch64-apple-darwin ./src/mod.ts
+RUN chmod -R 0660 /app
+RUN tar -cvf release.tar ./bin

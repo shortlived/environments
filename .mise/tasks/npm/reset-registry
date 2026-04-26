@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Reset NPM registry to npmjs.org"
+npm config set registry https://registry.npmjs.org/
+echo "✓ NPM registry reset to https://registry.npmjs.org/"

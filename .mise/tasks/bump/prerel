@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#MISE description="Bump pre-release label (e.g. v0.1.5 → v0.1.5-alpha.1)"
+# Usage: mise run bump:prerel [label]   (default label: alpha)
+set -euo pipefail
+
+LABEL="${1:-alpha}"
+git fetch --tags origin
+latest=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v '+' | grep -v -- '-' | head -n 1)
+[ -z "$latest" ] && latest="v0.0.0"
+
+ver="${latest#v}"
+new="v${ver}-${LABEL}.1"
+
+tmp=$(mktemp)
+jq --arg v "${new}" '.version = $v' deno.json > "${tmp}" && mv "${tmp}" deno.json
+deno run --allow-read --allow-write src/make_version.ts
+
+git add deno.json src/version.ts
+git commit -m "chore: bump version ${latest} → ${new} (pre-release)"
+git tag -l | grep -qx "${new}" || git tag -a "${new}" -m "${new}"
+
+echo "✓ Bumped ${latest} → ${new}"
+echo "  Push with: mise run tag:push"

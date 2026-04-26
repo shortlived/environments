@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Update all Deno dependencies to latest versions"
+set -euo pipefail
+echo "Checking for outdated dependencies..."
+deno outdated --update --latest
+echo "✓ Dependencies updated — review deno.lock changes"

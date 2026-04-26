@@ -1,0 +1,346 @@
+name: "Dispatch: Auto-Configure Repository"
+
+# Manually dispatched to configure a repo that was just created from this
+# template. Applies all three standard settings layers:
+#
+#   1. Repository settings  — description, topics, features, merge strategy
+#   2. Restrictions ruleset — block force-push + deletion on ALL branches
+#   3. develop protection   — PR required, status checks, no fast-forward
+#   4. main protection      — PR required, status checks, signed commits,
+#                             linear history required
+#
+# Required permission: the caller must have Admin access to the repository.
+# The built-in GITHUB_TOKEN is sufficient when the workflow runs with admin scope.
+#
+# Idempotent — safe to re-run; existing rulesets are updated, not duplicated.
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_description:
+        description: "Repository description (leave blank to keep current)"
+        required: false
+        type: string
+      topics:
+        description: "Comma-separated topics (e.g. deno,typescript,mise)"
+        required: false
+        type: string
+        default: "deno,typescript,mise,orchestras"
+      default_branch:
+        description: "Default branch"
+        required: false
+        type: string
+        default: develop
+      enable_issues:
+        description: "Enable Issues"
+        required: false
+        type: boolean
+        default: true
+      enable_wiki:
+        description: "Enable Wiki"
+        required: false
+        type: boolean
+        default: false
+      enable_discussions:
+        description: "Enable Discussions"
+        required: false
+        type: boolean
+        default: false
+      squash_merge_only:
+        description: "Allow only squash-merge for PRs"
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: "Dry run — print what would be applied without making changes"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  administration: write
+
+jobs:
+  configure:
+    name: "Configure repository"
+    runs-on: ubuntu-latest
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve repository
+        id: repo
+        run: |
+          REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
+          OWNER=$(echo "${REPO}" | cut -d/ -f1)
+          NAME=$(echo "${REPO}" | cut -d/ -f2)
+          echo "repo=${REPO}"   >> "$GITHUB_OUTPUT"
+          echo "owner=${OWNER}" >> "$GITHUB_OUTPUT"
+          echo "name=${NAME}"   >> "$GITHUB_OUTPUT"
+          echo "Repository: ${REPO}"
+
+      # ── Step 1: Repository settings ─────────────────────────────────────────
+
+      - name: "[1] Apply repository settings"
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          REPO="${{ steps.repo.outputs.repo }}"
+
+          PAYLOAD=$(jq -n \
+            --argjson has_issues "${{ inputs.enable_issues }}" \
+            --argjson has_wiki "${{ inputs.enable_wiki }}" \
+            --argjson has_discussions "${{ inputs.enable_discussions }}" \
+            --argjson squash_only "${{ inputs.squash_merge_only }}" \
+            --arg default_branch "${{ inputs.default_branch }}" \
+            '{
+              has_issues: $has_issues,
+              has_wiki: $has_wiki,
+              has_discussions: $has_discussions,
+              allow_squash_merge: true,
+              allow_merge_commit: (if $squash_only then false else true end),
+              allow_rebase_merge: true,
+              delete_branch_on_merge: true,
+              default_branch: $default_branch,
+              allow_auto_merge: true
+            }')
+
+          # Conditionally add description if provided
+          DESC="${{ inputs.repo_description }}"
+          if [ -n "${DESC}" ]; then
+            PAYLOAD=$(echo "${PAYLOAD}" | jq --arg d "${DESC}" '. + {description: $d}')
+          fi
+
+          echo "Applying repo settings to ${REPO}..."
+          gh api -X PATCH "repos/${REPO}" --input - <<< "${PAYLOAD}"
+          echo "✓ Repository settings applied"
+
+      - name: "[1] Apply repository topics"
+        if: ${{ inputs.dry_run != true && inputs.topics != '' }}
+        run: |
+          REPO="${{ steps.repo.outputs.repo }}"
+          TOPICS_JSON=$(echo "${{ inputs.topics }}" | tr ',' '\n' | jq -R . | jq -sc '.')
+          gh api -X PUT "repos/${REPO}/topics" \
+            --field "names=${TOPICS_JSON}" \
+            --silent
+          echo "✓ Topics applied: ${{ inputs.topics }}"
+
+      # ── Step 2: Restrictions ruleset (all branches) ──────────────────────────
+
+      - name: "[2] Apply — Restrictions ruleset (all branches)"
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          REPO="${{ steps.repo.outputs.repo }}"
+
+          # Delete stale ruleset with this name if it exists (idempotent)
+          EXISTING=$(gh api "repos/${REPO}/rulesets" --jq '.[] | select(.name == "Restrictions: All branches") | .id' 2>/dev/null || true)
+          for id in ${EXISTING}; do
+            gh api -X DELETE "repos/${REPO}/rulesets/${id}" --silent 2>/dev/null || true
+            echo "  Removed stale ruleset id=${id}"
+          done
+
+          gh api -X POST "repos/${REPO}/rulesets" --input - <<'RULESET'
+          {
+            "name": "Restrictions: All branches",
+            "target": "branch",
+            "enforcement": "active",
+            "conditions": {
+              "ref_name": {
+                "include": ["~ALL"],
+                "exclude": []
+              }
+            },
+            "rules": [
+              { "type": "deletion" },
+              { "type": "non_fast_forward" }
+            ],
+            "bypass_actors": [
+              {
+                "actor_id": 5,
+                "actor_type": "RepositoryRole",
+                "bypass_mode": "always"
+              }
+            ]
+          }
+          RULESET
+
+          echo "✓ Restrictions ruleset applied (all branches)"
+
+      # ── Step 3: develop protection ruleset ──────────────────────────────────
+
+      - name: "[3] Apply — develop branch protection ruleset"
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          REPO="${{ steps.repo.outputs.repo }}"
+
+          EXISTING=$(gh api "repos/${REPO}/rulesets" --jq '.[] | select(.name == "Protection: develop") | .id' 2>/dev/null || true)
+          for id in ${EXISTING}; do
+            gh api -X DELETE "repos/${REPO}/rulesets/${id}" --silent 2>/dev/null || true
+          done
+
+          gh api -X POST "repos/${REPO}/rulesets" --input - <<'RULESET'
+          {
+            "name": "Protection: develop",
+            "target": "branch",
+            "enforcement": "active",
+            "conditions": {
+              "ref_name": {
+                "include": ["refs/heads/develop"],
+                "exclude": []
+              }
+            },
+            "rules": [
+              {
+                "type": "pull_request",
+                "parameters": {
+                  "required_approving_review_count": 1,
+                  "dismiss_stale_reviews_on_push": true,
+                  "require_last_push_approval": false,
+                  "require_code_owner_review": false,
+                  "allowed_merge_methods": ["squash", "rebase"]
+                }
+              },
+              {
+                "type": "required_status_checks",
+                "parameters": {
+                  "strict_required_status_checks_policy": false,
+                  "do_not_enforce_on_create": true,
+                  "required_status_checks": [
+                    { "context": "pr-check / lint" },
+                    { "context": "pr-check / typecheck" },
+                    { "context": "pr-check / test" },
+                    { "context": "pr-check / security" }
+                  ]
+                }
+              },
+              { "type": "deletion" },
+              { "type": "non_fast_forward" }
+            ],
+            "bypass_actors": [
+              {
+                "actor_id": 5,
+                "actor_type": "RepositoryRole",
+                "bypass_mode": "pull_request"
+              }
+            ]
+          }
+          RULESET
+
+          echo "✓ develop protection ruleset applied"
+
+      # ── Step 4: main protection ruleset ─────────────────────────────────────
+
+      - name: "[4] Apply — main branch protection ruleset"
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          REPO="${{ steps.repo.outputs.repo }}"
+
+          EXISTING=$(gh api "repos/${REPO}/rulesets" --jq '.[] | select(.name == "Protection: main") | .id' 2>/dev/null || true)
+          for id in ${EXISTING}; do
+            gh api -X DELETE "repos/${REPO}/rulesets/${id}" --silent 2>/dev/null || true
+          done
+
+          gh api -X POST "repos/${REPO}/rulesets" --input - <<'RULESET'
+          {
+            "name": "Protection: main",
+            "target": "branch",
+            "enforcement": "active",
+            "conditions": {
+              "ref_name": {
+                "include": ["refs/heads/main"],
+                "exclude": []
+              }
+            },
+            "rules": [
+              {
+                "type": "pull_request",
+                "parameters": {
+                  "required_approving_review_count": 1,
+                  "dismiss_stale_reviews_on_push": true,
+                  "require_last_push_approval": true,
+                  "require_code_owner_review": true,
+                  "allowed_merge_methods": ["rebase"]
+                }
+              },
+              {
+                "type": "required_status_checks",
+                "parameters": {
+                  "strict_required_status_checks_policy": true,
+                  "do_not_enforce_on_create": false,
+                  "required_status_checks": [
+                    { "context": "pr-check / lint" },
+                    { "context": "pr-check / typecheck" },
+                    { "context": "pr-check / test" },
+                    { "context": "pr-check / security" },
+                    { "context": "tag" }
+                  ]
+                }
+              },
+              { "type": "required_linear_history" },
+              { "type": "required_signatures" },
+              { "type": "deletion" },
+              { "type": "non_fast_forward" }
+            ],
+            "bypass_actors": [
+              {
+                "actor_id": 5,
+                "actor_type": "RepositoryRole",
+                "bypass_mode": "pull_request"
+              }
+            ]
+          }
+          RULESET
+
+          echo "✓ main protection ruleset applied"
+
+      # ── Dry-run summary ──────────────────────────────────────────────────────
+
+      - name: "[Dry run] Print planned configuration"
+        if: ${{ inputs.dry_run == true }}
+        run: |
+          echo "=== DRY RUN — no changes made ==="
+          echo ""
+          echo "Repository:     ${{ steps.repo.outputs.repo }}"
+          echo "Description:    ${{ inputs.repo_description || '(unchanged)' }}"
+          echo "Topics:         ${{ inputs.topics }}"
+          echo "Default branch: ${{ inputs.default_branch }}"
+          echo "Issues:         ${{ inputs.enable_issues }}"
+          echo "Wiki:           ${{ inputs.enable_wiki }}"
+          echo "Discussions:    ${{ inputs.enable_discussions }}"
+          echo "Squash only:    ${{ inputs.squash_merge_only }}"
+          echo ""
+          echo "Would apply 3 branch rulesets:"
+          echo "  1. 'Restrictions: All branches'  — deletion + non-fast-forward on ALL"
+          echo "  2. 'Protection: develop'         — PR required, 4 status checks"
+          echo "  3. 'Protection: main'            — PR required, signed commits, linear history"
+
+      # ── Job summary ──────────────────────────────────────────────────────────
+
+      - name: Write job summary
+        if: always()
+        run: |
+          {
+            if [ "${{ inputs.dry_run }}" = "true" ]; then
+              echo "## Dry Run — Auto-Configure Repository"
+            else
+              echo "## Auto-Configure Repository — Applied"
+            fi
+            echo ""
+            echo "**Repository:** \`${{ steps.repo.outputs.repo }}\`"
+            echo ""
+            echo "| Ruleset | Branches | Key Rules |"
+            echo "|---------|----------|-----------|"
+            echo "| Restrictions: All branches | \`~ALL\` | deletion, non-fast-forward |"
+            echo "| Protection: develop | \`develop\` | PR required, 4 status checks |"
+            echo "| Protection: main | \`main\` | PR + signed commits + linear history |"
+            echo ""
+            echo "**Required status checks on develop + main:**"
+            echo "- \`pr-check / lint\`"
+            echo "- \`pr-check / typecheck\`"
+            echo "- \`pr-check / test\`"
+            echo "- \`pr-check / security\`"
+          } >> "$GITHUB_STEP_SUMMARY"

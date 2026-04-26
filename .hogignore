@@ -1,0 +1,5 @@
+.envcrypt
+.git
+.deno
+node_modules
+bin

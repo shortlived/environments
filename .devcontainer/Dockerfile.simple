@@ -1,0 +1,20 @@
+# syntax=docker/dockerfile:1
+FROM  --platform=$BUILDPLATFORM alpine:3 AS alpine
+LABEL devcontainer-feature-set="none"
+WORKDIR /home/expert/workspace
+
+USER root
+ENV PATH=$PATH:/opt/volta/bin
+COPY trusted_certs.pem /usr/local/share/ca-certificates/trusted_certs.crt
+RUN apk add --no-cache --no-check-certificate ca-certificates && update-ca-certificates && \
+    apk update --no-cache && apk add --no-cache \
+    bash \
+    deno \
+    direnv \
+    fish \
+    go \
+    ruby \
+    xclip \
+    xsel
+RUN rm /usr/local/share/ca-certificates/trusted_certs.crt
+ENTRYPOINT ["/usr/bin/fish", "-i"]

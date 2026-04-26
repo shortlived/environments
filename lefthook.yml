@@ -1,0 +1,40 @@
+# Lefthook configuration — https://lefthook.dev/configuration/
+# Uses mise tasks. Git hooks are also available as standalone scripts
+# in config/githooks/hooks/ (set via mise run hooks:install).
+
+pre-push:
+  parallel: false
+  jobs:
+    - name: "Lint"
+      tags: [quality]
+      run: mise run lint:check
+    - name: "Check"
+      tags: [quality]
+      run: mise run typecheck
+    - name: "Test"
+      tags: [quality]
+      run: mise run test
+
+pre-commit:
+  parallel: false
+  jobs:
+    - name: "Lint"
+      tags: [quality]
+      run: mise run lint:check
+    - name: "Format check"
+      tags: [quality]
+      run: mise run fmt:check
+
+commit-msg:
+  parallel: false
+  jobs:
+    - name: "Conventional Commits"
+      tags: [quality]
+      run: |
+        MSG=$(cat {1})
+        echo "$MSG" | grep -qE '^(Merge|Revert|chore: sync version)' && exit 0
+        echo "$MSG" | head -n 1 | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?(!)?: .{1,100}$' || {
+          echo "✗ Commit message must follow Conventional Commits format."
+          echo "  E.g.: feat: add new feature, fix(scope): resolve issue"
+          exit 1
+        }

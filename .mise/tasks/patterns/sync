@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#MISE description="Sync mise tasks + hooks from orchestras/dev-patterns (deno1a channel)"
+# Performs a shallow sync: fetches hooks and updates .patterns-hash.
+# For full task sync, clone dev-patterns and copy .mise/tasks manually.
+set -euo pipefail
+
+CHANNEL="${PATTERNS_CHANNEL:-deno1a}"
+REPO="${PATTERNS_REPO:-orchestras/dev-patterns}"
+REF="main"
+
+echo "=== Patterns Sync (channel: ${CHANNEL}) ==="
+echo "→ hooks:sync"
+mise run hooks:sync
+
+# Record sync hash
+HASH=$(curl -fsSL "https://api.github.com/repos/${REPO}/commits/${REF}" 2>/dev/null \
+  | jq -r '.sha // "unknown"' 2>/dev/null || echo "unknown")
+echo "${CHANNEL}@${HASH}" > .patterns-hash
+echo ""
+echo "✓ Patterns synced from ${REPO}@${HASH}"
+echo "  Recorded in .patterns-hash"

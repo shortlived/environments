@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#MISE description="Configure NPM to use Artifactory"
+set -euo pipefail
+source ./scripts/resolve_secrets.sh 2>/dev/null || true
+RT_URL="${RT_URL:-${ARTIFACTORY_NPM_URL:-}}"
+RT_USER="${RT_USER:-${ARTIFACTORY_USER:-}}"
+RT_KEY="${RT_KEY:-${ARTIFACTORY_KEY:-}}"
+if [ -z "$RT_URL" ] || [ -z "$RT_USER" ] || [ -z "$RT_KEY" ]; then
+  echo "ERROR: Set ARTIFACTORY_NPM_URL, ARTIFACTORY_USER, ARTIFACTORY_KEY env vars"
+  exit 1
+fi
+npm config set registry "$RT_URL"
+AUTH=$(echo -n "${RT_USER}:${RT_KEY}" | base64)
+REGISTRY_HOST=$(echo "$RT_URL" | sed 's|https*://||')
+npm config set "//${REGISTRY_HOST}:_auth" "$AUTH"
+echo "✓ NPM registry set to $RT_URL"

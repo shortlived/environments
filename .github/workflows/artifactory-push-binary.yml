@@ -1,0 +1,117 @@
+name: "Artifactory: Push Release Binaries"
+
+# Downloads binary artifacts from a GitHub Release and pushes them
+# to the Artifactory DEV binary repository. This is the entry point
+# for artifacts into the Artifactory promotion pipeline.
+#
+# Promotion path: GitHub Release → RT dev → RT uat → RT prod
+# (each promotion is a separate workflow dispatch)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "GitHub release tag to fetch artifacts from (e.g. v0.1.5)"
+        required: true
+      artifactory_repo:
+        description: "Artifactory DEV repository name"
+        required: true
+        default: "deno-binaries-dev"
+      artifact_folder:
+        description: "Target folder path in the repository"
+        required: true
+        default: "orchestras/"
+      artifactory_url:
+        description: "Artifactory base URL (fallback if not in Conjur)"
+        required: false
+      artifactory_user:
+        description: "Artifactory user (fallback if not in Conjur)"
+        required: false
+      artifactory_key:
+        description: "Artifactory API key (fallback if not in Conjur)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    env:
+      CONJUR_API_KEY: ${{ secrets.CONJUR_API_KEY }}
+      CONJUR_URL: ${{ vars.CONJUR_URL }}
+      CONJUR_SAFE: ${{ vars.CONJUR_SAFE }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup mise
+        uses: jdx/mise-action@v4
+
+      - name: Download release artifacts from GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p ./release-artifacts
+          gh release download "${{ inputs.release_tag }}" \
+            --dir ./release-artifacts \
+            --pattern '*'
+          echo "Downloaded artifacts:"
+          ls -la ./release-artifacts/
+
+      - name: Resolve Artifactory credentials
+        id: creds
+        run: |
+          source ./scripts/resolve_secrets.sh
+
+          RT_URL="" RT_USER="" RT_KEY=""
+
+          # Try Conjur first if CONJUR_API_KEY exists
+          if [ -n "${CONJUR_API_KEY:-}" ]; then
+            echo "Resolving credentials from Conjur..."
+            RT_URL=$(resolve_single_secret "artifactory/url" conjur 2>/dev/null) || true
+            RT_USER=$(resolve_single_secret "artifactory/user" conjur 2>/dev/null) || true
+            RT_KEY=$(resolve_single_secret "artifactory/api_key" conjur 2>/dev/null) || true
+          fi
+
+          # Fallback to inputs
+          RT_URL="${RT_URL:-${{ inputs.artifactory_url }}}"
+          RT_USER="${RT_USER:-${{ inputs.artifactory_user }}}"
+          RT_KEY="${RT_KEY:-${{ inputs.artifactory_key }}}"
+
+          if [ -z "$RT_URL" ] || [ -z "$RT_USER" ] || [ -z "$RT_KEY" ]; then
+            echo "::error::Could not resolve Artifactory credentials. Provide them via Conjur (CONJUR_API_KEY secret + CONJUR_URL/CONJUR_SAFE vars) or as workflow inputs."
+            exit 1
+          fi
+
+          echo "rt_url=$RT_URL" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$RT_USER"
+          echo "::add-mask::$RT_KEY"
+          echo "rt_user=$RT_USER" >> "$GITHUB_OUTPUT"
+          echo "rt_key=$RT_KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Setup JFrog CLI
+        uses: jfrog/setup-jfrog-cli@v5
+
+      - name: Push artifacts to Artifactory DEV
+        env:
+          RT_URL: ${{ steps.creds.outputs.rt_url }}
+          RT_USER: ${{ steps.creds.outputs.rt_user }}
+          RT_KEY: ${{ steps.creds.outputs.rt_key }}
+        run: |
+          jf config add rt-server \
+            --url="$RT_URL" \
+            --user="$RT_USER" \
+            --apikey="$RT_KEY" \
+            --interactive=false
+
+          DEST="${{ inputs.artifactory_repo }}/${{ inputs.artifact_folder }}${{ inputs.release_tag }}/"
+
+          jf rt upload \
+            "./release-artifacts/*" \
+            "$DEST" \
+            --server-id=rt-server \
+            --flat=true
+
+          echo "✓ Pushed ${{ inputs.release_tag }} artifacts to $DEST"

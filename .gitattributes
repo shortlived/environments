@@ -1,0 +1,3 @@
+#pattern  filter=crypt diff=crypt merge=crypt
+.envcrypt  filter=crypt diff=crypt merge=crypt
+trusted_certs.pem  filter=crypt diff=crypt merge=crypt

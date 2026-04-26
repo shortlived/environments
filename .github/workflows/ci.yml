@@ -1,0 +1,51 @@
+name: CI
+
+# Runs on PRs to develop/main and pushes to develop.
+# Uses a single sequential job to verify the full pipeline.
+# For PR-specific parallel jobs (required status checks), see pr-check.yml.
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup mise
+        uses: jdx/mise-action@v4
+        with:
+          experimental: true
+
+      - name: Lint
+        run: mise run lint:check
+
+      - name: Format check
+        run: mise run fmt:check
+
+      - name: Type check
+        run: mise run typecheck
+
+      - name: Tests
+        run: mise run test
+
+      - name: Build (version.ts sync)
+        run: mise run build
+
+      - name: Execute app
+        run: mise run execute

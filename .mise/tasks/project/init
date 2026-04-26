@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+#MISE description="Full project init: git config, sync tags, set version, install hooks, bootstrap secrets"
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+cd "${ROOT}"
+
+echo "=== Project Init ==="
+echo ""
+
+echo "→ git:config (delta, GPG, rebase-only, hooks path)"
+mise run git:config
+
+echo "→ tag:sync (fetch + prune remote tags)"
+mise run tag:sync
+
+echo "→ version:init (create v0.1.0 if no remote tags)"
+mise run version:init
+
+echo "→ version:sync (align deno.json + version.ts)"
+mise run version:sync
+
+echo "→ hooks:sync (fetch hooks from dev-patterns)"
+mise run hooks:sync
+
+echo "→ hooks:install (register hooks path)"
+mise run hooks:install
+
+echo "→ secrets:init (bootstrap transcrypt if present)"
+mise run secrets:init 2>/dev/null || echo "  ⚠ secrets:init skipped (transcrypt not configured)"
+
+echo ""
+echo "✓ Project initialised."
+echo ""
+echo "  mise tasks              — list all available tasks"
+echo "  mise run ci             — run full pipeline"
+echo "  mise run completions    — install shell tab-completions"
+echo "  mise run dispatch:configure  — apply GitHub repo settings + rulesets"

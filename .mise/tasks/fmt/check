@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Check formatting without writing — exits non-zero if unformatted (CI-safe)"
+set -euo pipefail
+deno fmt --check
+echo "✓ Formatting check passed"

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#MISE description="Delete all local tags only if no tags exist on the remote"
+set -euo pipefail
+echo "Fetching remote tags..."
+git fetch --tags origin
+remote_count=$(git ls-remote --tags origin 'refs/tags/v*' 2>/dev/null | grep -v '\^{}' | wc -l)
+local_tags=$(git tag -l 'v*')
+local_count=$(echo "$local_tags" | grep -c 'v' || true)
+if [ "$remote_count" -eq 0 ]; then
+  if [ "$local_count" -gt 0 ]; then
+    echo "No remote tags found. Deleting $local_count local tags..."
+    git tag -l 'v*' | xargs git tag -d
+    echo "✓ All local tags deleted"
+  else
+    echo "No local or remote tags. Nothing to do."
+  fi
+else
+  echo "Remote has $remote_count tags — keeping local tags intact."
+fi

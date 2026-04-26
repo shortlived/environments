@@ -1,0 +1,143 @@
+{
+  "name": "Docker from Docker Compose",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspace",
+
+  // Use this environment variable if you need to bind mount your local source code into a new container.
+  "remoteEnv": {
+    "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}"
+  },
+  "settings": {
+    "workbench.colorTheme": "Tokyo Night",
+    "terminal.integrated.defaultProfile.linux": "fish",
+    "terminal.integrated.profiles.linux": {
+      "bash": {
+        "path": "/bin/bash"
+      },
+      "zsh": {
+        "path": "/bin/zsh"
+      },
+      "fish": {
+        "path": "/usr/bin/fish"
+      }
+    }
+  },
+
+  // Configure tool-specific properties.
+  "customizations": {
+    // Configure properties specific to VS Code.
+    "vscode": {
+      // Add the IDs of extensions you want installed when the container is created.
+      "extensions": [
+        "bierner.color-info",
+        "bierner.github-markdown-preview",
+        "bierner.markdown-footnotes",
+        "bierner.markdown-mermaid",
+        "bierner.markdown-preview-github-styles",
+        "bierner.markdown-yaml-preamble",
+        "bmalehorn.vscode-fish",
+        "chrmarti.regex",
+        "davidanson.vscode-markdownlint",
+        "dbaeumer.vscode-eslint",
+        "denoland.vscode-deno",
+        "docker.docker",
+        "donjayamanne.git-extension-pack",
+        "donjayamanne.githistory",
+        "durzn.brackethighlighter",
+        "eamodio.gitlens",
+        "editorconfig.editorconfig",
+        "enkia.tokyo-night",
+        "esbenp.prettier-vscode",
+        "firsttris.vscode-jest-runner",
+        "formulahendry.auto-rename-tag",
+        "formulahendry.docker-explorer",
+        "formulahendry.docker-extension-pack",
+        "formulahendry.github-actions",
+        "github.copilot",
+        "github.copilot-chat",
+        "github.vscode-github-actions",
+        "gruntfuggly.activitusbar",
+        "hardikmodha.create-tests",
+        "hb432.prettier-eslint-typescript",
+        "ipedrazas.kubernetes-snippets",
+        "janisdd.vscode-edit-csv",
+        "jasonnutter.search-node-modules",
+        "kisstkondoros.vscode-gutter-preview",
+        "lunuan.kubernetes-templates",
+        "maddog986.autodocblocker",
+        "magdalenalipka.tokyo-night-frameless",
+        "mohsen1.prettify-json",
+        "monish.regexsnippets",
+        "ms-azuretools.vscode-docker",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        "ms-vscode-remote.remote-containers",
+        "ms-vscode.azurecli",
+        "ms-vscode.makefile-tools",
+        "muggle.regexsnippets",
+        "naumovs.color-highlight",
+        "nhoizey.gremlins",
+        "ntc.integrated-terminal-tasks",
+        "passionkind.prettier-vscode-with-tabs",
+        "qaqulya.encypt-decypt",
+        "qcz.text-power-tools",
+        "quentinguidee.gitignore-ultimate",
+        "rapidapi.vscode-rapidapi-client",
+        "rapidapi.vscode-services",
+        "redhat.vscode-commons",
+        "redhat.vscode-yaml",
+        "redocly.openapi-vs-code",
+        "reliutg.visual-regex",
+        "richie5um2.vscode-sort-json",
+        "robole.file-bunny",
+        "rogalmic.bash-debug",
+        "rogalmic.zsh-debug",
+        "roscop.activefileinstatusbar",
+        "rossmassey.shortenurl",
+        "royaction.color-manager",
+        "rvest.vs-code-prettier-eslint",
+        "saurabh.terminal-manager",
+        "searking.preview-vscode",
+        "shakram02.bash-beautify",
+        "shawn.file-name-search",
+        "shd101wyy.markdown-preview-enhanced",
+        "shinotatwu-ds.file-tree-generator",
+        "shyykoserhiy.git-autoconfig",
+        "smartbearsoftware.vscode-swaggerhub",
+        "sonarsource.sonarlint-vscode",
+        "spmeesseman.vscode-taskexplorer",
+        "tamasfe.even-better-toml",
+        "tim-koehler.helm-intellisense",
+        "tino.simple-rest-client",
+        "tombonnike.vscode-status-bar-format-toggle",
+        "tomoki1207.pdf",
+        "tomoyukim.vscode-mermaid-editor",
+        "transnano.vscode-icon-all",
+        "trybick.terminal-zoom",
+        "tzachovadia.todo-list",
+        "ugosan.vscode-openpgp",
+        "vscodevim.vim",
+        "vsls-contrib.codetour",
+        "vsls-contrib.gistfs",
+        "vstirbu.vscode-mermaid-preview",
+        "wix.vscode-import-cost",
+        "wmaurer.change-case",
+        "wraith13.multi-encode",
+        "xyz.local-history",
+        "yahya-gilany.vscode-terminal-launcher",
+        "yardensachs.copy-python-path",
+        "yasht.terminal-all-in-one",
+        "yasukotelin.toggle-panel",
+        "yutengjing.view-github-repository",
+        "yzhang.dictionary-completion",
+        "yzhang.markdown-all-in-one",
+        "z0al.settings-toggle",
+        "zaaack.markdown-editor",
+        "zhucy.project-tree"
+      ]
+    }
+  },
+
+  // Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
+  "remoteUser": "root"
+}

@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# pre-commit — runs on `git commit`
+# Checks: deno fmt, deno lint, no debug statements, no large files
+set -euo pipefail
+
+source "$(git rev-parse --show-toplevel)/scripts/colors.sh" 2>/dev/null || true
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+echo -e "${CYAN:-}[pre-commit]${ENDCOLOR:-} Running pre-commit checks..."
+
+# Staged TypeScript/JavaScript files only
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx|mts|cts|mjs|cjs)$' || true)
+
+if [ -n "$STAGED_TS" ]; then
+  count=$(echo "$STAGED_TS" | wc -l | tr -d ' ')
+  echo "  Staged TS/JS files: ${count}"
+
+  # deno fmt --check on staged files
+  echo -e "  ${BLUE:-}→ deno fmt --check${ENDCOLOR:-}"
+  # shellcheck disable=SC2086
+  echo "$STAGED_TS" | xargs deno fmt --check --quiet 2>&1 || {
+    echo -e "${RED:-}✗ deno fmt check failed. Run: mise run fmt:fix${ENDCOLOR:-}"
+    exit 1
+  }
+
+  # deno lint on staged files
+  echo -e "  ${BLUE:-}→ deno lint${ENDCOLOR:-}"
+  # shellcheck disable=SC2086
+  echo "$STAGED_TS" | xargs deno lint 2>&1 || {
+    echo -e "${RED:-}✗ deno lint failed. Run: mise run lint:check${ENDCOLOR:-}"
+    exit 1
+  }
+
+  # Block debug statements
+  if echo "$STAGED_TS" | xargs grep -lnE 'debugger;|console\.debug\(' 2>/dev/null; then
+    echo -e "${RED:-}✗ Debug statements found. Remove before committing.${ENDCOLOR:-}"
+    exit 1
+  fi
+fi
+
+# Block files > 5MB
+while IFS= read -r f; do
+  if [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 5242880 ]; then
+    echo -e "${RED:-}✗ File exceeds 5MB: ${f}${ENDCOLOR:-}"
+    echo "  Add to .gitignore or use git-lfs."
+    exit 1
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACM)
+
+echo -e "${GREEN:-}✓ pre-commit checks passed${ENDCOLOR:-}"

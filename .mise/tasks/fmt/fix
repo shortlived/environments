@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Format all TypeScript/JSON source files (deno fmt)"
+set -euo pipefail
+deno fmt
+echo "✓ Formatting applied"

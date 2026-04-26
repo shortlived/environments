@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#MISE description="Release develop → main via rebase (no merge commits) and push"
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/colors.sh" 2>/dev/null || true
+original=$(git branch --show-current)
+echo "=== Releasing develop → main ==="
+echo "1/3 Fetching origin..."
+git fetch origin develop main
+echo "2/3 Checking out main and rebasing onto origin/develop..."
+git checkout main
+git pull --rebase origin main 2>/dev/null || true
+git rebase origin/develop
+echo "✓ main rebased onto origin/develop"
+echo "3/3 Pushing main..."
+git push --force-with-lease origin main
+echo "✓ Released: develop → main"
+echo ""
+echo "Next steps:"
+echo "  mise run bump:patch   (or :minor / :major)"
+echo "  mise run tag:push     — triggers release workflow"
+if [ "${original}" != "main" ] && git show-ref --quiet "refs/heads/${original}" 2>/dev/null; then
+  git checkout "${original}" 2>/dev/null || true
+fi

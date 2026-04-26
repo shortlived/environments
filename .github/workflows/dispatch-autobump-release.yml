@@ -1,0 +1,191 @@
+name: "Dispatch: Auto-Bump & Release"
+
+# Manually dispatch to bump the next logical version, rebuild version.ts,
+# compile binaries, push the tag, and trigger the existing release.yml pipeline.
+#
+# Bump logic (overflow cascade):
+#   patch:  x.y.0 … x.y.9  → x.y.(n+1)   — at 9, rolls over to minor
+#   minor:  x.0.0 … x.9.0  → x.(n+1).0   — at 9, rolls over to major
+#   major:  0.0.0 … 9.0.0  → (n+1).0.0   — no upper cap on major
+#
+# The workflow:
+#   1. Compute next version from the latest remote semver tag
+#   2. Update deno.json + regenerate version.ts
+#   3. Commit the changes [skip ci] on main
+#   4. Create + push the annotated tag  → this triggers release.yml automatically
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Version component to bump (auto = patch with cascade)"
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - patch
+          - minor
+          - major
+      dry_run:
+        description: "Dry run — compute and print next version without writing"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  autobump:
+    name: "Auto-bump & release"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup mise
+        uses: jdx/mise-action@v2
+        with:
+          experimental: true
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch all remote tags
+        run: git fetch --tags origin
+
+      - name: Compute next version
+        id: semver
+        shell: bash
+        run: |
+          # ── find latest clean semver tag ──────────────────────────────────
+          latest=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname \
+            | grep -v '+' | grep -v -- '-' | head -n 1)
+          [ -z "$latest" ] && latest="v0.0.0"
+
+          ver="${latest#v}"
+          IFS='.' read -r major minor patch <<< "$ver"
+
+          bump="${{ inputs.bump_type }}"
+
+          # ── cascade logic for "auto" and "patch" ─────────────────────────
+          if [ "$bump" = "auto" ] || [ "$bump" = "patch" ]; then
+            if [ "$patch" -lt 9 ]; then
+              patch=$((patch + 1))
+            elif [ "$minor" -lt 9 ]; then
+              # patch overflow → bump minor
+              minor=$((minor + 1))
+              patch=0
+              echo "cascade=patch→minor" >> "$GITHUB_OUTPUT"
+            else
+              # minor overflow → bump major
+              major=$((major + 1))
+              minor=0
+              patch=0
+              echo "cascade=minor→major" >> "$GITHUB_OUTPUT"
+            fi
+          elif [ "$bump" = "minor" ]; then
+            if [ "$minor" -lt 9 ]; then
+              minor=$((minor + 1))
+              patch=0
+            else
+              major=$((major + 1))
+              minor=0
+              patch=0
+              echo "cascade=minor→major" >> "$GITHUB_OUTPUT"
+            fi
+          elif [ "$bump" = "major" ]; then
+            major=$((major + 1))
+            minor=0
+            patch=0
+          fi
+
+          new_ver="v${major}.${minor}.${patch}"
+
+          echo "previous=${latest}"  >> "$GITHUB_OUTPUT"
+          echo "version=${new_ver}"  >> "$GITHUB_OUTPUT"
+          echo "plain=${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
+
+          echo "Previous: ${latest}"
+          echo "Next:     ${new_ver}"
+
+      - name: "[Dry run] Print result and exit"
+        if: ${{ inputs.dry_run == true }}
+        run: |
+          echo "DRY RUN — no changes will be made."
+          echo "Previous: ${{ steps.semver.outputs.previous }}"
+          echo "Next:     ${{ steps.semver.outputs.version }}"
+          echo "Cascade:  ${{ steps.semver.outputs.cascade || 'none' }}"
+
+      - name: Abort if tag already exists
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          TAG="${{ steps.semver.outputs.version }}"
+          if git tag -l | grep -qx "${TAG}"; then
+            echo "Tag ${TAG} already exists — nothing to do."
+            exit 0
+          fi
+
+      - name: Update deno.json version
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          NEW="${{ steps.semver.outputs.version }}"
+          tmp=$(mktemp)
+          jq --arg v "${NEW}" '.version = $v' deno.json > "${tmp}" && mv "${tmp}" deno.json
+          echo "deno.json updated to ${NEW}"
+
+      - name: Regenerate version.ts
+        if: ${{ inputs.dry_run != true }}
+        run: mise run build
+
+      - name: Commit version bump [skip ci]
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          PREV="${{ steps.semver.outputs.previous }}"
+          NEW="${{ steps.semver.outputs.version }}"
+          CASCADE="${{ steps.semver.outputs.cascade }}"
+
+          msg="chore: bump version ${PREV} → ${NEW} [skip ci]"
+          [ -n "${CASCADE}" ] && msg="${msg} (${CASCADE} cascade)"
+
+          git add deno.json src/version.ts
+          git diff --cached --quiet || git commit -m "${msg}"
+
+      - name: Push commit to main
+        if: ${{ inputs.dry_run != true }}
+        run: git push origin HEAD:main
+
+      - name: Create and push annotated tag
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          TAG="${{ steps.semver.outputs.version }}"
+          PREV="${{ steps.semver.outputs.previous }}"
+          CASCADE="${{ steps.semver.outputs.cascade }}"
+
+          MSG="${TAG}"
+          [ -n "${CASCADE}" ] && MSG="${TAG} (${CASCADE} cascade)"
+
+          git tag -a "${TAG}" -m "${MSG}"
+          git push origin "${TAG}"
+          echo "✓ Tagged and pushed ${TAG} → release.yml will fire"
+
+      - name: Summary
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          echo "## Auto-Bump Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Previous | \`${{ steps.semver.outputs.previous }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| New | \`${{ steps.semver.outputs.version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Bump type | \`${{ inputs.bump_type }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cascade | \`${{ steps.semver.outputs.cascade || 'none' }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "The tag push will trigger **release.yml** to compile binaries, build the Docker image, and create the GitHub Release." >> "$GITHUB_STEP_SUMMARY"

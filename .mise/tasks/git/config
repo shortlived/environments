@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#MISE description="Configure local git: delta pager, GPG signing, rebase-only, hooks path"
+set -euo pipefail
+git config --local core.pager delta
+git config --local interactive.diffFilter 'delta --color-only'
+git config --local delta.navigate true
+git config --local delta.dark true
+git config --local delta.side-by-side true
+git config --local merge.conflictStyle zdiff3
+git config --local commit.gpgsign true
+git config --local tag.gpgSign true
+git config --local core.hooksPath config/githooks/hooks
+git config --local pull.rebase true
+git config --local merge.ff only
+git config --local rebase.autoStash true
+echo "✓ Local git config applied (delta, GPG signing, rebase-only, hooks path)"

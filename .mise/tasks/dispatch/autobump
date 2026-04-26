@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#MISE description="Dispatch: trigger auto-bump-release workflow (auto/patch/minor/major)"
+# Usage: mise run dispatch:autobump [auto|patch|minor|major] [--dry-run]
+set -euo pipefail
+
+BUMP_TYPE="${1:-auto}"
+DRY_RUN="${2:-false}"
+[ "$DRY_RUN" = "--dry-run" ] && DRY_RUN="true"
+
+if ! gh auth status &>/dev/null; then
+  echo "ERROR: gh CLI not authenticated — run: gh auth login"
+  exit 1
+fi
+
+REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
+echo "Triggering dispatch-autobump-release workflow on ${REPO}..."
+
+gh workflow run dispatch-autobump-release.yml \
+  -R "${REPO}" \
+  -f "bump_type=${BUMP_TYPE}" \
+  -f "dry_run=${DRY_RUN}"
+
+echo "✓ Dispatch sent (bump_type=${BUMP_TYPE}, dry_run=${DRY_RUN})"
+echo "  Monitor: gh run list --workflow=dispatch-autobump-release.yml"

@@ -1,0 +1,106 @@
+name: "Artifactory: Push Docker Image"
+
+# Builds a Docker image and pushes it to the Artifactory DEV Docker
+# repository. This is the entry point for images into the promotion pipeline.
+#
+# Promotion path: RT docker-dev → RT docker-uat → RT docker-prod
+# (each promotion is a separate workflow dispatch)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_name:
+        description: "Docker image name (e.g. orchestras/mod)"
+        required: true
+      image_tag:
+        description: "Image tag (defaults to version from deno.json if empty)"
+        required: false
+      docker_repo:
+        description: "Artifactory Docker DEV repository"
+        required: true
+        default: "docker-dev-local"
+      artifactory_url:
+        description: "Artifactory Docker registry URL (fallback if not in Conjur)"
+        required: false
+      artifactory_user:
+        description: "Artifactory user (fallback if not in Conjur)"
+        required: false
+      artifactory_key:
+        description: "Artifactory API key (fallback if not in Conjur)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    env:
+      CONJUR_API_KEY: ${{ secrets.CONJUR_API_KEY }}
+      CONJUR_URL: ${{ vars.CONJUR_URL }}
+      CONJUR_SAFE: ${{ vars.CONJUR_SAFE }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup mise
+        uses: jdx/mise-action@v4
+
+      - name: Resolve Artifactory credentials
+        id: creds
+        run: |
+          source ./scripts/resolve_secrets.sh
+
+          RT_URL="" RT_USER="" RT_KEY=""
+
+          if [ -n "${CONJUR_API_KEY:-}" ]; then
+            echo "Resolving credentials from Conjur..."
+            RT_URL=$(resolve_single_secret "artifactory/docker_url" conjur 2>/dev/null) || true
+            RT_USER=$(resolve_single_secret "artifactory/user" conjur 2>/dev/null) || true
+            RT_KEY=$(resolve_single_secret "artifactory/api_key" conjur 2>/dev/null) || true
+          fi
+
+          RT_URL="${RT_URL:-${{ inputs.artifactory_url }}}"
+          RT_USER="${RT_USER:-${{ inputs.artifactory_user }}}"
+          RT_KEY="${RT_KEY:-${{ inputs.artifactory_key }}}"
+
+          if [ -z "$RT_URL" ] || [ -z "$RT_USER" ] || [ -z "$RT_KEY" ]; then
+            echo "::error::Could not resolve Artifactory credentials. Provide via Conjur or inputs."
+            exit 1
+          fi
+
+          echo "rt_url=$RT_URL" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$RT_USER"
+          echo "::add-mask::$RT_KEY"
+          echo "rt_user=$RT_USER" >> "$GITHUB_OUTPUT"
+          echo "rt_key=$RT_KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          TAG="${{ inputs.image_tag }}"
+          if [ -z "$TAG" ]; then
+            TAG=$(jq -r '.version' deno.json)
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t "${{ inputs.image_name }}:${{ steps.tag.outputs.tag }}" \
+            -f Dockerfile.package .
+
+      - name: Login and push to Artifactory DEV
+        env:
+          RT_URL: ${{ steps.creds.outputs.rt_url }}
+          RT_USER: ${{ steps.creds.outputs.rt_user }}
+          RT_KEY: ${{ steps.creds.outputs.rt_key }}
+        run: |
+          echo "$RT_KEY" | docker login "$RT_URL" -u "$RT_USER" --password-stdin
+
+          FULL="${RT_URL}/${{ inputs.docker_repo }}/${{ inputs.image_name }}:${{ steps.tag.outputs.tag }}"
+          docker tag "${{ inputs.image_name }}:${{ steps.tag.outputs.tag }}" "$FULL"
+          docker push "$FULL"
+
+          echo "✓ Pushed $FULL to Artifactory DEV"

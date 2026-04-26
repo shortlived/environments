@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#MISE description="Sync git hooks from orchestras/dev-patterns (deno1a channel)"
+set -euo pipefail
+
+CHANNEL="${PATTERNS_CHANNEL:-deno1a}"
+REPO="${GITHOOKS_REPO:-orchestras/dev-patterns}"
+REF="${GITHOOKS_VERSION:-main}"
+DEST="config/githooks/hooks"
+BASE="https://raw.githubusercontent.com/${REPO}/${REF}/lib/${CHANNEL}/hooks"
+
+echo "Syncing hooks from ${REPO}@${REF} (channel: ${CHANNEL})..."
+mkdir -p "${DEST}"
+
+HOOKS=(pre-commit commit-msg pre-push)
+for hook in "${HOOKS[@]}"; do
+  echo "  → ${hook}"
+  curl -fsSL "${BASE}/${hook}" -o "${DEST}/${hook}" \
+    || { echo "  ⚠ Could not fetch ${hook} — keeping existing"; continue; }
+  chmod +x "${DEST}/${hook}"
+done
+
+# Sync channel manifest
+curl -fsSL "${BASE}/githooks.toml" -o "config/githooks/githooks.toml" 2>/dev/null || true
+
+echo "✓ Hooks synced (${#HOOKS[@]} hooks)"
+echo "  Run 'mise run hooks:install' to register the hooks path"

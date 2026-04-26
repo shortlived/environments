@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+#MISE description="Apply branch protection rulesets (develop + main) via GitHub API"
+# Equivalent to running dispatch-autoconfigure-rulesets.yml locally.
+set -euo pipefail
+
+if ! gh auth status &>/dev/null; then
+  echo "ERROR: gh CLI not authenticated — run: gh auth login"
+  exit 1
+fi
+
+REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
+echo "Configuring rulesets for ${REPO}..."
+
+# Set default branch
+gh api -X PATCH "repos/${REPO}" -f default_branch=develop --silent
+echo "✓ Default branch → develop"
+
+# Helper: delete existing ruleset by name (idempotent)
+delete_ruleset() {
+  local name="$1"
+  local ids
+  ids=$(gh api "repos/${REPO}/rulesets" --jq ".[] | select(.name == \"${name}\") | .id" 2>/dev/null || true)
+  for id in ${ids}; do
+    gh api -X DELETE "repos/${REPO}/rulesets/${id}" --silent 2>/dev/null || true
+  done
+}
+
+# Restrictions: all branches
+delete_ruleset "Restrictions: All branches"
+gh api -X POST "repos/${REPO}/rulesets" --input - <<'RULES' >/dev/null
+{
+  "name": "Restrictions: All branches",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["~ALL"], "exclude": [] } },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" }
+  ],
+  "bypass_actors": [{ "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }]
+}
+RULES
+echo "✓ Ruleset: Restrictions: All branches"
+
+# Protection: develop
+delete_ruleset "Protection: develop"
+gh api -X POST "repos/${REPO}/rulesets" --input - <<'RULES' >/dev/null
+{
+  "name": "Protection: develop",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["refs/heads/develop"], "exclude": [] } },
+  "rules": [
+    { "type": "pull_request", "parameters": {
+        "required_approving_review_count": 1,
+        "dismiss_stale_reviews_on_push": true,
+        "require_last_push_approval": false,
+        "require_code_owner_review": false,
+        "allowed_merge_methods": ["squash","rebase"]
+    }},
+    { "type": "required_status_checks", "parameters": {
+        "strict_required_status_checks_policy": false,
+        "do_not_enforce_on_create": true,
+        "required_status_checks": [
+          {"context": "pr-check / lint"},
+          {"context": "pr-check / typecheck"},
+          {"context": "pr-check / test"},
+          {"context": "pr-check / security"}
+        ]
+    }},
+    { "type": "deletion" },
+    { "type": "non_fast_forward" }
+  ],
+  "bypass_actors": [{ "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "pull_request" }]
+}
+RULES
+echo "✓ Ruleset: Protection: develop"
+
+# Protection: main
+delete_ruleset "Protection: main"
+gh api -X POST "repos/${REPO}/rulesets" --input - <<'RULES' >/dev/null
+{
+  "name": "Protection: main",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["refs/heads/main"], "exclude": [] } },
+  "rules": [
+    { "type": "pull_request", "parameters": {
+        "required_approving_review_count": 1,
+        "dismiss_stale_reviews_on_push": true,
+        "require_last_push_approval": true,
+        "require_code_owner_review": true,
+        "allowed_merge_methods": ["rebase"]
+    }},
+    { "type": "required_status_checks", "parameters": {
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {"context": "pr-check / lint"},
+          {"context": "pr-check / typecheck"},
+          {"context": "pr-check / test"},
+          {"context": "pr-check / security"},
+          {"context": "tag"}
+        ]
+    }},
+    { "type": "required_linear_history" },
+    { "type": "required_signatures" },
+    { "type": "deletion" },
+    { "type": "non_fast_forward" }
+  ],
+  "bypass_actors": [{ "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "pull_request" }]
+}
+RULES
+echo "✓ Ruleset: Protection: main"
+
+echo ""
+echo "✓ All branch rulesets applied to ${REPO}"
+echo "  Required status checks: pr-check / lint, typecheck, test, security"

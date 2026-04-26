@@ -1,0 +1,65 @@
+name: Tag & Release Version
+
+# Runs on push to main. Reads the version from deno.json (set locally
+# by `mise run bump:patch/minor/major`), ensures version.ts is synced,
+# and creates + pushes the git tag. The tag push triggers release.yml.
+#
+# Version authority is LOCAL — developers choose the version with
+# `mise run bump:*` and commit the result. CI just tags and releases.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    name: tag
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup mise
+        uses: jdx/mise-action@v4
+        with:
+          experimental: true
+
+      - name: Read version and ensure version.ts is in sync
+        id: ver
+        run: |
+          mise run build
+
+          VERSION=$(jq -r '.version' deno.json)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Current deno.json version: ${VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if ! git diff --quiet src/version.ts; then
+            git add src/version.ts
+            git commit -m "chore: sync version.ts to ${VERSION} [skip ci]"
+            git push origin main
+            echo "Committed version.ts sync"
+          fi
+
+      - name: Create and push tag
+        run: |
+          TAG="${{ steps.ver.outputs.version }}"
+          git fetch --tags origin
+
+          if git tag -l | grep -qx "${TAG}"; then
+            echo "Tag ${TAG} already exists — nothing to do."
+            exit 0
+          fi
+
+          git tag -a "${TAG}" -m "${TAG}"
+          git push origin "${TAG}"
+          echo "✓ Tagged and pushed ${TAG} → release.yml will fire"

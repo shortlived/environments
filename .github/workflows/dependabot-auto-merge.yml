@@ -1,0 +1,42 @@
+name: Dependabot Auto-merge
+
+# Automatically approves and merges Dependabot PRs for patch/minor
+# updates in GitHub Actions dependencies and npm patch updates.
+# Major updates always require human review.
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: auto-merge
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Approve patch/minor updates
+        if: >
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr review --approve "${{ github.event.pull_request.html_url }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-merge patch/minor updates
+        if: >
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr merge --auto --squash "${{ github.event.pull_request.html_url }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

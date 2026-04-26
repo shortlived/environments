@@ -1,0 +1,113 @@
+name: PR Check
+
+# Each job name here MUST match the "context" strings in the branch ruleset.
+# After this workflow runs once on a PR, register the checks in your ruleset:
+#   mise run vcs:protect
+# or manually in GitHub Settings → Rules → Rulesets.
+#
+# Required checks registered by vcs:protect:
+#   - pr-check / lint
+#   - pr-check / typecheck
+#   - pr-check / test
+#   - pr-check / security
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+  security-events: write
+
+concurrency:
+  group: pr-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup mise
+        uses: jdx/mise-action@v4
+        with:
+          experimental: true
+
+      - name: deno lint
+        run: mise run lint:check
+
+      - name: deno fmt check
+        run: mise run fmt:check
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup mise
+        uses: jdx/mise-action@v4
+        with:
+          experimental: true
+
+      - name: deno check
+        run: mise run typecheck
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        deno-version: ["2.0.2", "latest"]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup mise
+        uses: jdx/mise-action@v4
+        with:
+          experimental: true
+
+      - name: Setup Deno ${{ matrix.deno-version }}
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ matrix.deno-version }}
+
+      - name: Run tests
+        run: deno test -A --reporter=pretty
+
+  security:
+    name: security
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup mise
+        uses: jdx/mise-action@v4
+        with:
+          experimental: true
+
+      - name: Dependency audit
+        run: mise run scan:deps
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v4
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:javascript-typescript"
