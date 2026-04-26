@@ -1,30 +1,21 @@
-import { generatedVersion } from "./version.ts";
-
 /**
- * Deno Edge Template — orchestras/deno
+ * kpsc — KeePass Secret Cache
  *
- * Entry point. Replace this with your application logic.
+ * Entry point for the compiled binary. All real logic lives in `cli.ts`;
+ * this module just dispatches and wires stdout/stderr.
  */
-function main(): void {
-  const args = Deno.args;
 
-  if (args.includes("--version") || args.includes("-v")) {
-    console.log(generatedVersion);
-    Deno.exit(0);
+import { runCli } from "./cli.ts";
+
+if (import.meta.main) {
+  const result = await runCli(Deno.args);
+  if (result.stdout) {
+    await Deno.stdout.write(new TextEncoder().encode(result.stdout));
   }
-
-  if (args.includes("--help") || args.includes("-h")) {
-    console.log(`orchestras-deno ${generatedVersion}`);
-    console.log("");
-    console.log("Usage: mod [options]");
-    console.log("");
-    console.log("Options:");
-    console.log("  -v, --version  Print version and exit");
-    console.log("  -h, --help     Print this help message");
-    Deno.exit(0);
+  if (result.stderr) {
+    await Deno.stderr.write(new TextEncoder().encode(result.stderr));
   }
-
-  console.log(`orchestras-deno ${generatedVersion}`);
+  Deno.exit(result.code);
 }
 
-main();
+export { runCli };

@@ -1,0 +1,37 @@
+#compdef kpsc
+# zsh completion for kpsc.
+# Install to ~/.zsh/completions/_kpsc and ensure that path is in $fpath.
+
+_kpsc() {
+    local -a subcommands keepass_subs
+    subcommands=(
+        'acquiesce:Read KEY=VALUE from stdin → encrypted cache'
+        'push:Run command with secrets injected'
+        'rotate:Force cache invalidation'
+        'status:Show TTL remaining'
+        'keepass:KeePass helpers (list/dump)'
+        'version:Print binary version'
+        'help:Show usage'
+    )
+    keepass_subs=(
+        'list:List entries under <group>'
+        'dump:Dump KEY=VALUE for entries under <group>'
+    )
+
+    if (( CURRENT == 2 )); then
+        _describe -t commands 'kpsc subcommand' subcommands
+        return
+    fi
+    case $words[2] in
+        keepass)
+            if (( CURRENT == 3 )); then
+                _describe -t commands 'kpsc keepass subcommand' keepass_subs
+            fi
+            ;;
+        push)
+            _command_names -e
+            ;;
+    esac
+}
+
+_kpsc "$@"
