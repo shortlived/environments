@@ -163,3 +163,11 @@ src/SAST
 
 # semver cache (removed — version tracked in deno.json only)
 .semver.*
+
+# kpsc test/coverage artifacts
+coverage/
+
+# kpsc binary build artifacts
+dist/
+secrets-repo/
+tap-repo/

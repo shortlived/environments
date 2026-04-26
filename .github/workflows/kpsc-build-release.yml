@@ -1,0 +1,191 @@
+name: Build and Release kpsc
+
+# Triggered when a kpsc-versioned tag is pushed (kpsc-v1.2.3) so it doesn't
+# collide with the existing semantic-version tags consumed by release.yml.
+on:
+  push:
+    tags:
+      - "kpsc-v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag to build (e.g. kpsc-v1.0.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Compile kpsc binary
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v2.x
+
+      - name: Inject compiletimehash into build
+        env:
+          COMPILETIMEHASH: ${{ secrets.COMPILETIMEHASH }}
+        run: |
+          if [[ -z "$COMPILETIMEHASH" ]]; then
+            echo "::error::COMPILETIMEHASH secret missing" && exit 1
+          fi
+          cat > src/constants/compiletimehash.ts <<EOF
+          // Build-time injected. Do not commit.
+          let _override: string | null = null;
+          export function getCompiletimehash(): string {
+            if (_override !== null) return _override;
+            return Deno.env.get("KPSC_COMPILETIMEHASH") ?? "${COMPILETIMEHASH}";
+          }
+          export function setCompiletimehashOverride(value: string | null): void {
+            _override = value;
+          }
+          EOF
+
+      - name: Type check
+        run: deno check src/mod.ts
+
+      - name: Test
+        env:
+          KPSC_COMPILETIMEHASH: ${{ secrets.COMPILETIMEHASH }}
+        run: deno test -A src/tests/
+
+      - name: Compile binary (Apple Silicon)
+        run: |
+          mkdir -p dist
+          deno compile \
+            --allow-net \
+            --allow-run \
+            --allow-env \
+            --allow-read \
+            --allow-write \
+            --target aarch64-apple-darwin \
+            --output dist/kpsc-aarch64 \
+            src/mod.ts
+
+      - name: Compile binary (Intel)
+        run: |
+          deno compile \
+            --allow-net \
+            --allow-run \
+            --allow-env \
+            --allow-read \
+            --allow-write \
+            --target x86_64-apple-darwin \
+            --output dist/kpsc-x86_64 \
+            src/mod.ts
+
+      - name: Tarball + checksums
+        id: hashes
+        run: |
+          cd dist
+          tar czf kpsc-aarch64.tar.gz kpsc-aarch64
+          tar czf kpsc-x86_64.tar.gz  kpsc-x86_64
+          shasum -a 256 kpsc-aarch64.tar.gz | tee kpsc-aarch64.tar.gz.sha256
+          shasum -a 256 kpsc-x86_64.tar.gz  | tee kpsc-x86_64.tar.gz.sha256
+          echo "sha_aarch64=$(awk '{print $1}' kpsc-aarch64.tar.gz.sha256)" >> "$GITHUB_OUTPUT"
+          echo "sha_x86=$(awk '{print $1}' kpsc-x86_64.tar.gz.sha256)" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve version tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME:-}"
+          if [[ -z "$TAG" || "$TAG" == "main" || "$TAG" == "develop" ]]; then
+            TAG="${{ inputs.version }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/kpsc-v')
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: |
+            dist/kpsc-aarch64.tar.gz
+            dist/kpsc-aarch64.tar.gz.sha256
+            dist/kpsc-x86_64.tar.gz
+            dist/kpsc-x86_64.tar.gz.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update compiletimehash in kpsc-secrets repo
+        if: env.KPSC_SECRETS_DEPLOY_KEY != ''
+        env:
+          COMPILETIMEHASH: ${{ secrets.COMPILETIMEHASH }}
+          KPSC_SECRETS_DEPLOY_KEY: ${{ secrets.KPSC_SECRETS_DEPLOY_KEY }}
+          KPSC_SECRETS_REPO: ${{ vars.KPSC_SECRETS_REPO || 'softdist/kpsc-secrets' }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "$KPSC_SECRETS_DEPLOY_KEY" > ~/.ssh/secrets_key
+          chmod 600 ~/.ssh/secrets_key
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/secrets_key -o StrictHostKeyChecking=accept-new"
+          git clone "git@github.com:${KPSC_SECRETS_REPO}.git" secrets-repo
+          printf '%s\n' "$COMPILETIMEHASH" > secrets-repo/compiletimehash.txt
+          cd secrets-repo
+          git config user.email "ci@softdist"
+          git config user.name "kpsc-ci"
+          git add compiletimehash.txt
+          git diff --cached --quiet || git commit -m "chore: update compiletimehash for $TAG"
+          git push
+
+      - name: Update homebrew tap formula
+        if: env.HOMEBREW_TAP_DEPLOY_KEY != ''
+        env:
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO || 'softdist/homebrew-softdist' }}
+          TAG: ${{ steps.version.outputs.tag }}
+          SHA_AARCH64: ${{ steps.hashes.outputs.sha_aarch64 }}
+          SHA_X86: ${{ steps.hashes.outputs.sha_x86 }}
+          REPO_FULL: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "$HOMEBREW_TAP_DEPLOY_KEY" > ~/.ssh/tap_key
+          chmod 600 ~/.ssh/tap_key
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/tap_key -o StrictHostKeyChecking=accept-new"
+          git clone "git@github.com:${TAP_REPO}.git" tap-repo
+          mkdir -p tap-repo/Formula
+          cat > tap-repo/Formula/kpsc.rb <<EOF
+          class Kpsc < Formula
+            desc "KeePass Secret Cache — time-boxed encrypted secret injection"
+            homepage "https://github.com/${REPO_FULL}"
+            version "${TAG#kpsc-v}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/${REPO_FULL}/releases/download/${TAG}/kpsc-aarch64.tar.gz"
+                sha256 "${SHA_AARCH64}"
+              else
+                url "https://github.com/${REPO_FULL}/releases/download/${TAG}/kpsc-x86_64.tar.gz"
+                sha256 "${SHA_X86}"
+              end
+            end
+
+            def install
+              if Hardware::CPU.arm?
+                bin.install "kpsc-aarch64" => "kpsc"
+              else
+                bin.install "kpsc-x86_64" => "kpsc"
+              end
+            end
+
+            test do
+              system "#{bin}/kpsc", "version"
+            end
+          end
+          EOF
+          cd tap-repo
+          git config user.email "ci@softdist"
+          git config user.name "kpsc-ci"
+          git add Formula/kpsc.rb
+          git diff --cached --quiet || git commit -m "chore: kpsc $TAG"
+          git push

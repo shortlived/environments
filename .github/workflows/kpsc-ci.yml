@@ -1,0 +1,65 @@
+name: kpsc CI
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "shell/**"
+      - "deno.json"
+      - "deno.lock"
+      - ".github/workflows/kpsc-ci.yml"
+  push:
+    branches: [develop]
+    paths:
+      - "src/**"
+      - "shell/**"
+      - "deno.json"
+      - "deno.lock"
+
+permissions:
+  contents: read
+
+jobs:
+  lint-test:
+    name: Deno lint + typecheck + test (Linux fast path)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KPSC_COMPILETIMEHASH: "ci-linux-test-do-not-use"
+      KPSC_KEYCHAIN_BACKEND: "file"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v2.x
+      - name: Install fish + zsh for shell tests
+        run: sudo apt-get update && sudo apt-get install -y fish zsh
+      - run: deno fmt --check
+      - run: deno lint
+      - run: deno check src/mod.ts
+      - run: deno test -A --coverage=coverage src/tests/
+      - name: Coverage report
+        run: deno coverage coverage --include="src/" | tee coverage.txt
+      - name: Enforce 80% line coverage
+        run: |
+          line=$(awk -F'|' '/All files/ {gsub(/ /,"",$5); print $5+0}' coverage.txt)
+          echo "line coverage = $line%"
+          awk -v v="$line" 'BEGIN{exit (v+0 < 80)}'
+
+  macos-build:
+    name: Deno compile smoke test (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    needs: lint-test
+    env:
+      KPSC_COMPILETIMEHASH: "ci-macos-test-do-not-use"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v2.x
+      - run: deno test -A src/tests/
+      - name: Compile current host
+        run: deno compile --allow-net --allow-run --allow-env --allow-read --allow-write --output dist/kpsc src/mod.ts
+      - name: Smoke test compiled binary
+        run: ./dist/kpsc version
