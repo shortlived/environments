@@ -47,6 +47,12 @@ Deno.test("kpsc-ci.yml enforces lint, typecheck, test, coverage gate", async () 
   assertStringIncludes(text, "deno check src/mod.ts");
   assertStringIncludes(text, "deno test -A");
   assertStringIncludes(text, "Enforce 80% line coverage");
+  // Coverage must be parsed from LCOV (machine-readable) rather than the
+  // human-formatted table, which contains ANSI color escapes that break
+  // awk-based field extraction.
+  assertStringIncludes(text, "--lcov");
+  assertStringIncludes(text, "LH:");
+  assertStringIncludes(text, "LF:");
 });
 
 Deno.test("brew formula stub matches expected layout", async () => {

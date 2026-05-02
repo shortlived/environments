@@ -6,6 +6,15 @@ exposed by `kpsc version` is sourced from `deno.json` via `mise run build`.
 
 ## [Unreleased]
 
+### Fixed
+
+- `kpsc-ci.yml` 80 % line-coverage gate now parses the LCOV report
+  (`LH:` / `LF:` totals) instead of awk-extracting the human-readable
+  table. `deno coverage` always emits ANSI color escapes — even into
+  redirected stdout and even with `NO_COLOR=1` — which made the previous
+  `awk -F'|' '{print $5+0}'` extraction yield `0%` and fail the gate
+  unconditionally.
+
 ### Added — Short-Lived Environments (`kpsc`)
 
 The repository now hosts the **`kpsc`** ("KeePass Secret Cache") short-lived
