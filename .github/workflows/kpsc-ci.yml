@@ -38,13 +38,22 @@ jobs:
       - run: deno lint
       - run: deno check src/mod.ts
       - run: deno test -A --coverage=coverage src/tests/
-      - name: Coverage report
-        run: deno coverage coverage --include="src/" | tee coverage.txt
-      - name: Enforce 80% line coverage
+      - name: Coverage report (human)
+        run: deno coverage coverage --include="src/"
+      - name: Enforce 80% line coverage (parsed from LCOV)
         run: |
-          line=$(awk -F'|' '/All files/ {gsub(/ /,"",$5); print $5+0}' coverage.txt)
-          echo "line coverage = $line%"
-          awk -v v="$line" 'BEGIN{exit (v+0 < 80)}'
+          deno coverage coverage --include="src/" --lcov > coverage.lcov
+          # LCOV emits LH:<lines hit> and LF:<lines found> per file. Sum
+          # both totals across files; ratio is line coverage.
+          lh=$(awk -F: '/^LH:/ {sum += $2} END {print sum+0}' coverage.lcov)
+          lf=$(awk -F: '/^LF:/ {sum += $2} END {print sum+0}' coverage.lcov)
+          if [[ "$lf" -eq 0 ]]; then
+            echo "::error::No lines found in coverage report"
+            exit 1
+          fi
+          pct=$(awk -v h="$lh" -v f="$lf" 'BEGIN{printf "%.2f", (h*100.0)/f}')
+          echo "line coverage = ${pct}% (${lh}/${lf})"
+          awk -v v="$pct" 'BEGIN{exit (v+0 < 80)}'
 
   macos-build:
     name: Deno compile smoke test (macOS)
