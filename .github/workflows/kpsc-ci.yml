@@ -28,8 +28,8 @@ jobs:
       KPSC_COMPILETIMEHASH: "ci-linux-test-do-not-use"
       KPSC_KEYCHAIN_BACKEND: "file"
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v1
+      - uses: actions/checkout@v6
+      - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
       - name: Install fish + zsh for shell tests
@@ -63,8 +63,8 @@ jobs:
     env:
       KPSC_COMPILETIMEHASH: "ci-macos-test-do-not-use"
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v1
+      - uses: actions/checkout@v6
+      - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
       - run: deno test -A src/tests/
